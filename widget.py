@@ -2,8 +2,7 @@
 import sys
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives import padding, hashes, hmac
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 
 from PySide6.QtWidgets import QApplication, QWidget, QFileDialog, QLineEdit
@@ -47,10 +46,10 @@ class EncryptionWorker(QObject):
                 self.encrypt_file()
             else:
                 self.decrypt_file()
-            self.finished.emit()
         except Exception as e:
             self.message.emit(str(e))
-            self.finished.emit()
+        self.finished.emit()
+        return
 
     def encrypt_file(self):
         input_path = self.params['input_path']
@@ -129,6 +128,8 @@ class EncryptionWorker(QObject):
                         self.message.emit("Authentication successful.")
                     else:
                         self.message.emit("Authentication failed. File corrupted or tampered, or incorrect password.")
+                        self.finished.emit()
+                        return
                     break
                 else:
                     h.update(filecontent)
@@ -159,7 +160,7 @@ class EncryptionWorker(QObject):
                         plaintext = decryptor.update(ciphertext)
                         outputfile.write(plaintext)
                         self.progress.emit(int((totalread / filesize)*100))
-        self.message.emit("Decryption finished")
+        self.message.emit("Decryption finished.")
         self.progress.emit(100)
 
 class Widget(QWidget):
@@ -222,6 +223,8 @@ class Widget(QWidget):
             self.ui.lineEdit_outputFile.setText(file_path)
 
     def run(self, encrypting):
+        self.ui.pushButton_encrypt.setEnabled(False)
+        self.ui.pushButton_decrypt.setEnabled(False)
         input_path = self.ui.lineEdit_inputFile.text()
         output_path = self.ui.lineEdit_outputFile.text()
         password = self.ui.lineEdit_password.text()
@@ -250,8 +253,11 @@ class Widget(QWidget):
         self.worker.message.connect(self.ui.textBrowser.append)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.finished.connect(self.updateButtons)
         self.thread.finished.connect(self.thread.deleteLater)
 
+        self.ui.lineEdit_password.clear()
+        self.ui.lineEdit_passwordConfirm.clear()
         self.thread.start()
 
 if __name__ == "__main__":
