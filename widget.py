@@ -223,8 +223,6 @@ class Widget(QWidget):
             self.ui.lineEdit_outputFile.setText(file_path)
 
     def run(self, encrypting):
-        self.ui.pushButton_encrypt.setEnabled(False)
-        self.ui.pushButton_decrypt.setEnabled(False)
         input_path = self.ui.lineEdit_inputFile.text()
         output_path = self.ui.lineEdit_outputFile.text()
         password = self.ui.lineEdit_password.text()
@@ -258,6 +256,8 @@ class Widget(QWidget):
 
         self.ui.lineEdit_password.clear()
         self.ui.lineEdit_passwordConfirm.clear()
+        self.ui.pushButton_encrypt.setEnabled(False)
+        self.ui.pushButton_decrypt.setEnabled(False)
         self.thread.start()
 
 if __name__ == "__main__":
