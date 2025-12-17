@@ -223,6 +223,7 @@ class Widget(QWidget):
             self.ui.lineEdit_outputFile.setText(file_path)
 
     def run(self, encrypting):
+        self.ui.progressBar.setValue(0)
         input_path = self.ui.lineEdit_inputFile.text()
         output_path = self.ui.lineEdit_outputFile.text()
         password = self.ui.lineEdit_password.text()
