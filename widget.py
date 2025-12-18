@@ -15,6 +15,11 @@ from PySide6.QtCore import QObject, Signal, QThread
 #     pyside2-uic form.ui -o ui_form.py
 from ui_form import Ui_Widget
 
+SALT_SIZE = 32
+CHUNK_SIZE = 1024*1024
+TAG_SIZE = 32
+IV_SIZE = 16
+
 class EncryptionWorker(QObject):
     finished = Signal()
     progress = Signal(int)
@@ -55,7 +60,7 @@ class EncryptionWorker(QObject):
         input_path = self.params['input_path']
         output_path = self.params['output_path']
         filesize = os.path.getsize(input_path)
-        iv = os.urandom(16)
+        iv = os.urandom(IV_SIZE)
 
         cipher = Cipher(algorithms.AES(self.key), modes.CBC(iv))
         encryptor = cipher.encryptor()
@@ -69,11 +74,10 @@ class EncryptionWorker(QObject):
                 outputfile.write(self.salt)
                 totalread = 0
                 while True:
-                    plaintext = inputfile.read(1048576)
+                    plaintext = inputfile.read(CHUNK_SIZE)
                     totalread += len(plaintext)
                     if totalread == filesize:
-                        padded = padder.update(plaintext)
-                        padded += padder.finalize()
+                        padded = padder.update(plaintext) + padder.finalize()
                         ciphertext = encryptor.update(padded) + encryptor.finalize()
                         outputfile.write(ciphertext)
                         break
@@ -88,7 +92,7 @@ class EncryptionWorker(QObject):
             totalread = 0
             h = hmac.HMAC(self.hmackey, hashes.SHA256())
             while True:
-                filecontent = encryptedfile.read(1048576)
+                filecontent = encryptedfile.read(CHUNK_SIZE)
                 totalread += len(filecontent)
                 if(totalread == filesize):
                     h.update(filecontent)
@@ -111,10 +115,10 @@ class EncryptionWorker(QObject):
         self.message.emit("Authenticating file...")
         with open(input_path, 'rb') as encryptedfile:
             h = hmac.HMAC(self.hmackey, hashes.SHA256())
-            filesize = os.path.getsize(input_path) - 32
+            filesize = os.path.getsize(input_path) - TAG_SIZE
             totalread = 0
             while True:
-                filecontent = encryptedfile.read(1048576)
+                filecontent = encryptedfile.read(CHUNK_SIZE)
                 totalread += len(filecontent)
                 if(totalread >= filesize):
                     if(totalread > filesize):
@@ -123,7 +127,7 @@ class EncryptionWorker(QObject):
                     h.update(filecontent)
                     signature = h.finalize()
                     encryptedfile.seek(-32, 2)
-                    filehash = encryptedfile.read(32)
+                    filehash = encryptedfile.read(TAG_SIZE)
                     if(filehash == signature):
                         self.message.emit("Authentication successful.")
                     else:
@@ -136,24 +140,23 @@ class EncryptionWorker(QObject):
                     self.progress.emit(int((totalread / filesize)*100))
 
         self.message.emit("Decrypting...")
-        filesize = os.path.getsize(input_path) - 32 - 16 - 16
+        filesize = os.path.getsize(input_path) - TAG_SIZE - IV_SIZE - SALT_SIZE
         with open(input_path, 'rb') as inputfile:
             iv = inputfile.read(16)
-            inputfile.seek(32)
+            inputfile.seek(IV_SIZE + SALT_SIZE)
             with open(output_path, 'wb') as outputfile:
                 cipher = Cipher(algorithms.AES(self.key), modes.CBC(iv))
                 decryptor = cipher.decryptor()
                 totalread = 0
                 while True:
-                    ciphertext = inputfile.read(1048576)
+                    ciphertext = inputfile.read(CHUNK_SIZE)
                     totalread += len(ciphertext)
                     if totalread >= filesize:
                         if(totalread > filesize):
                             excess = totalread - filesize
                             ciphertext = ciphertext[:-excess]
                         plaintext = decryptor.update(ciphertext) + decryptor.finalize()
-                        unpadded = unpadder.update(plaintext)
-                        unpadded += unpadder.finalize()
+                        unpadded = unpadder.update(plaintext) + unpadder.finalize()
                         outputfile.write(unpadded)
                         break
                     else:
@@ -227,15 +230,15 @@ class Widget(QWidget):
         input_path = self.ui.lineEdit_inputFile.text()
         output_path = self.ui.lineEdit_outputFile.text()
         password = self.ui.lineEdit_password.text()
-        salt = bytes(16)
+        salt = bytes(SALT_SIZE)
         self.ui.textBrowser.clear()
 
         if(encrypting):
-            salt = os.urandom(16)
+            salt = os.urandom(SALT_SIZE)
         else:
             f = open(input_path, "rb")
-            f.seek(16)
-            salt = f.read(16)
+            f.seek(IV_SIZE)
+            salt = f.read(SALT_SIZE)
 
         self.worker = EncryptionWorker(
             encrypting=encrypting,
